@@ -1,5 +1,16 @@
 # API-Penetration-Testing-Lab
-A comprehensive API penetration testing lab.
+
+A comprehensive API penetration testing lab designed to help security professionals test API endpoints for common vulnerabilities including XSS and SQL injection.
+
+## Features
+
+- **Dynamic Endpoint Testing**: Configure multiple API endpoints via JSON configuration file
+- **Authentication Support**: Supports Authorization headers (Bearer tokens, API keys)
+- **Multiple Vulnerability Tests**:
+  - Reflected XSS detection
+  - SQL Injection detection
+- **Detailed Reporting**: Generates comprehensive JSON reports with timestamps
+- **Flexible Configuration**: Easily customize test parameters and endpoints
 
 ## Installation
 
@@ -32,7 +43,7 @@ git clone git@github.com:Shanmukhasrisai/API-Penetration-Testing-Lab.git
 gh repo clone Shanmukhasrisai/API-Penetration-Testing-Lab
 ```
 
-#### 2. Navigate to the Project Directory
+#### 2. Navigate to Project Directory
 
 ```bash
 cd API-Penetration-Testing-Lab
@@ -60,34 +71,133 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If `requirements.txt` is not available, install the necessary packages manually:
+The required dependencies include:
+- Flask (for potential web interface)
+- requests (for HTTP requests)
+- colorama (for colored terminal output)
+
+## Usage
+
+### Basic Usage
+
+To run a penetration test on configured API endpoints:
+
 ```bash
-pip install flask requests
+python api.py --config endpoints.json
 ```
 
-#### 5. Run the Application
+### With Authentication
+
+To test endpoints that require authentication:
 
 ```bash
-python api.py.py
+python api.py --config endpoints.json --auth "Bearer YOUR_TOKEN_HERE"
 ```
 
-#### 6. Access the API
+or with an API key:
 
-Once the application is running, the API will be available at:
-```
-http://localhost:5000
+```bash
+python api.py --config endpoints.json --auth "APIKey YOUR_KEY_HERE"
 ```
 
-### Troubleshooting
+### Save Results to File
+
+To save the test results to a JSON file:
+
+```bash
+python api.py --config endpoints.json --output results.json
+```
+
+### Configuration File Format
+
+Create a JSON configuration file (e.g., `endpoints.json`) with the following structure:
+
+```json
+{
+  "endpoints": [
+    {
+      "url": "https://example.com/api/search",
+      "method": "GET",
+      "params": ["q", "filter"]
+    },
+    {
+      "url": "https://example.com/api/users",
+      "method": "POST",
+      "params": ["username", "email"]
+    }
+  ]
+}
+```
+
+## Command Line Options
+
+- `--config`: **(Required)** Path to JSON configuration file with API endpoints
+- `--auth`: Authorization header value (e.g., 'Bearer <token>' or 'APIKey <key>')
+- `--output`: Path to save JSON report file
+
+## Vulnerability Detection
+
+### Reflected XSS
+
+The tool tests for reflected cross-site scripting by injecting various XSS payloads and checking if they're reflected in the response.
+
+### SQL Injection
+
+The tool tests for SQL injection vulnerabilities by injecting SQL-specific payloads and checking for database error messages in responses.
+
+## Report Format
+
+The tool generates detailed JSON reports with the following structure:
+
+```json
+{
+  "url": "https://example.com/api/endpoint",
+  "method": "GET",
+  "vulnerabilities": {
+    "reflected_xss": ["param1"],
+    "sql_injection": ["param2"]
+  }
+}
+```
+
+## Troubleshooting
 
 - **Permission Errors**: Try running commands with `sudo` (Linux/macOS) or as Administrator (Windows)
-- **Port Already in Use**: Ensure that port 5000 is not already in use by another application
+- **Module Not Found**: Ensure you've activated the virtual environment and installed dependencies
 - **Dependency Installation Fails**: Try upgrading pip first: `pip install --upgrade pip`
 - **Virtual Environment Issues**: Make sure you've activated the virtual environment before installing dependencies
+- **Connection Errors**: Verify that target URLs are accessible and properly formatted
 
-### Additional Notes
+## Important Notes
 
-- This is a lab environment designed for educational purposes only
-- Do not use this application in production environments
-- Always follow ethical hacking guidelines and obtain proper authorization before conducting any penetration tests
-- Review the LICENSE file for usage terms and conditions
+### ⚠️ Legal and Ethical Considerations
+
+- This tool is designed for **educational purposes only**
+- Only use this tool on systems you **own** or have **explicit written permission** to test
+- Unauthorized penetration testing is **illegal** and unethical
+- Always follow responsible disclosure practices
+- Respect the privacy and security of others
+
+### Best Practices
+
+- Always obtain proper authorization before conducting penetration tests
+- Document all testing activities
+- Follow your organization's security policies
+- Report vulnerabilities responsibly
+- Do not use this tool in production environments without proper safeguards
+
+## Improvements
+
+For a comprehensive list of improvements and enhancements made to this repository, see [IMPROVEMENTS.md](IMPROVEMENTS.md).
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests to improve this tool.
+
+## License
+
+Review the LICENSE file for usage terms and conditions.
+
+## Disclaimer
+
+This tool is provided for educational and authorized testing purposes only. The authors are not responsible for any misuse or damage caused by this tool. Always ensure you have explicit permission before testing any systems you do not own.
