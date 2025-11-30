@@ -7,8 +7,11 @@ Comprehensive collection of advanced security labs designed to test sophisticate
 This directory contains five advanced labs covering critical API security vulnerabilities:
 
 ### Lab 1: GraphQL Security (lab1_graphql_security.py)
+
 **Port:** 5001
+
 **Difficulty:** Advanced
+
 **Focus:** GraphQL-specific vulnerabilities
 
 **Vulnerabilities Covered:**
@@ -25,11 +28,15 @@ This directory contains five advanced labs covering critical API security vulner
 ---
 
 ### Lab 2: Authentication Bypass (lab2_authentication_bypass.py)
+
 **Port:** 5002
+
 **Difficulty:** Advanced
+
 **Focus:** JWT manipulation and authentication vulnerabilities
 
 **Vulnerabilities Covered:**
+
 1. **Weak JWT Token Generation** - Predictable timestamps and token claims
 2. **JWT Algorithm Confusion** - Accept 'none' algorithm
 3. **Bearer Scheme Bypass** - Improper token validation
@@ -44,227 +51,165 @@ This directory contains five advanced labs covering critical API security vulner
 12. **Header Injection** - Custom header-based role escalation
 
 **Challenge Endpoint:** `/api/challenge` (requires admin role)
+
 **Expected Flag:** `FLAG{auth_bypass_master}`
 
 ---
 
 ### Lab 3: Injection Attacks (lab3_injection_attacks.py)
+
 **Port:** 5003
+
 **Difficulty:** Advanced
-**Focus:** Multiple injection attack vectors
+
+**Focus:** SQL Injection, NoSQL Injection, Command Injection, and XSS
 
 **Vulnerabilities Covered:**
-1. **SQL Injection (Basic)**
-   - `/api/search/users` - LIKE clause injection
-   - `/api/user/<id>` - URL parameter injection
 
-2. **SQL Injection (Authentication)**
-   - `/api/user/login` - Authentication bypass
-   - Example: `admin' --` or `' OR '1'='1`
+1. **SQL Injection:**
+   - Union-based injection
+   - Error-based injection
+   - Blind SQL injection
+   - Time-based injection
+   - String concatenation bypass
 
-3. **NoSQL Injection**
-   - `/api/nosql/search` - MongoDB operator injection
-   - Example: `{"$ne": null}`
+2. **NoSQL Injection:**
+   - MongoDB query injection
+   - Operator injection
+   - JavaScript injection in queries
+   - JSON parameter pollution
 
-4. **Command Injection**
-   - `/api/file/retrieve` - File reading via command execution
-   - `/api/ping` - Network utility injection
-   - `/api/image/resize` - ImageMagick command injection
+3. **Command Injection:**
+   - Shell command injection
+   - Path traversal
+   - Command chaining
+   - Environment variable manipulation
 
-5. **XML External Entity (XXE) Injection**
-   - `/api/xml/parse` - No XXE protection
+4. **Cross-Site Scripting (XSS):**
+   - Reflected XSS
+   - Stored XSS
+   - DOM-based XSS
 
-6. **LDAP Injection**
-   - `/api/ldap/search` - LDAP filter manipulation
+**Challenge Endpoint:** `/api/admin/challenge` (requires SQL injection to access)
 
-7. **Multiple Injection Vectors**
-   - `/api/admin/export` - Combined SQL and command injection
-
-**Challenge Endpoint:** `/api/challenge/injection`
-**Expected Flag:** `FLAG{injection_master}`
-
-**Exploitation Examples:**
-```
-SQL: /api/search/users?q=admin' OR '1'='1
-SQL: /api/user/login -d '{"username":"admin' --","password":"anything"}'
-Command: /api/file/retrieve?file=/etc/passwd
-Command: /api/ping?target=127.0.0.1; cat /etc/passwd
-LDAP: /api/ldap/search?username=*
-```
+**Expected Flag:** `FLAG{injection_expert}`
 
 ---
 
 ### Lab 4: Session Management (lab4_session_management.py)
+
 **Port:** 5004
+
 **Difficulty:** Advanced
-**Focus:** Session handling and cookie manipulation
+
+**Focus:** Session handling vulnerabilities and CSRF
 
 **Vulnerabilities Covered:**
-1. **Weak Session ID Generation** - Timestamp-based predictable IDs
-2. **Sequential Session IDs** - Incrementing counter
-3. **Session Fixation** - Accepting arbitrary session IDs
-4. **CSRF Token Weakness** - Predictable, reusable tokens
-5. **Insufficient CSRF Protection** - No token validation on dangerous operations
-6. **CSRF Bypass via GET** - State-changing operations via GET requests
-7. **Session Timeout Not Enforced** - Expired sessions still accepted
-8. **Automatic Session Extension** - Indefinite session lifetime without re-auth
-9. **Sensitive Data in Session** - Passwords/tokens exposed via session info
-10. **Session Enumeration** - Listing all active sessions
-11. **Role in Cookies** - Client-side role manipulation
-12. **Cookie Echo** - Echoing user input back in cookies
 
-**Exploitation Vectors:**
-```
-Week Session: /api/login/weak - timestamps are predictable
-Sequential: /api/login/sequential - session IDs are 0000000001, 0000000002, etc.
-Fixation: /api/session/set?session_id=attacker_controlled
-Role Bypass: Set-Cookie: user_role=admin
-CSRF: POST /api/transfer without CSRF token
-```
+1. **Weak Session Generation:**
+   - Predictable session IDs
+   - Sequential session tokens
+   - Timestamp-based sessions
 
-**Challenge Endpoint:** `/api/admin/panel` or `/api/challenge/session`
+2. **Session Fixation:**
+   - Session ID reuse
+   - Pre-authenticated session adoption
+   - Missing session regeneration
+
+3. **Session Hijacking:**
+   - Session token in URL
+   - Session token in logs
+   - Insecure session storage
+
+4. **CSRF Vulnerabilities:**
+   - Missing CSRF tokens
+   - Weak CSRF validation
+   - State-changing GET requests
+
+5. **Insecure Session Storage:**
+   - Client-side session data
+   - Unencrypted session cookies
+   - Missing secure/httponly flags
+
+**Challenge Endpoint:** `/api/admin/sensitive` (requires session hijacking)
+
 **Expected Flag:** `FLAG{session_master}`
 
 ---
 
-### Lab 5: API Security & IDOR (lab5_api_security.py)
+### Lab 5: API Security (lab5_api_security.py)
+
 **Port:** 5005
+
 **Difficulty:** Advanced
-**Focus:** API-specific vulnerabilities
+
+**Focus:** IDOR, authorization bypass, and rate limiting
 
 **Vulnerabilities Covered:**
-1. **Rate Limiting Bypass** - Using X-Forwarded-For header
-2. **API Key Exposure** - Keys listed in response
-3. **Weak API Key Validation** - Overly permissive checks
-4. **Version-Based Differences** - v1 API has fewer security controls
-5. **IDOR - User Data** - Direct object reference without authorization
-6. **IDOR - Financial Data** - Accessing balance of other users
-7. **IDOR - Update Operations** - Modifying other users' data
-8. **Mass Assignment** - Unintended fields accepted in requests
-9. **Server-Side Template Injection (SSTI)** - User input in template rendering
-10. **Format String Vulnerabilities** - Improper string formatting
 
-**Exploitation Examples:**
-```
-IDOR User: GET /api/user/1 (access admin profile)
-IDOR Balance: GET /api/user/2/balance (check balance of other users)
-IDOR Update: PUT /api/user/3 -d '{"email":"hacker@evil.com"}'
-Rate Limit Bypass: Add header X-Forwarded-For: 127.0.0.2
-API Key: GET /api/keys/list (list all API keys)
-Mass Assignment: POST /api/product/create -d '{"discount":90}'
-SSTI: POST /api/template -d '{"template":"{{7*7}}"}'
-```
+1. **Insecure Direct Object References (IDOR):**
+   - Direct ID manipulation
+   - Predictable resource IDs
+   - Missing authorization checks
+   - Horizontal privilege escalation
+   - Vertical privilege escalation
 
-**Challenge Endpoints:**
-- `/api/challenge/idor` - Access admin data (user_id=1)
-- `/api/challenge/ratelimit` - Bypass rate limiting
-- `/api/challenge/api-key` - Use admin API key
+2. **Broken Function Level Authorization:**
+   - Admin endpoints without checks
+   - Role-based access bypass
+   - Method-based authorization bypass
 
-**Expected Flags:**
-- `FLAG{idor_master}`
-- `FLAG{ratelimit_bypass}`
-- `FLAG{api_key_master}`
+3. **Mass Assignment:**
+   - Direct property manipulation
+   - Unvalidated input parameters
+   - Privilege escalation through parameters
+
+4. **Rate Limiting Issues:**
+   - Missing rate limits
+   - Bypassable rate limits
+   - Header-based rate limit bypass
+
+**Challenge Endpoint:** `/api/admin/flag` (requires authorization bypass)
+
+**Expected Flag:** `FLAG{api_security_pro}`
 
 ---
 
-## Getting Started
+## Running the Labs
 
-### Installation
+Each lab runs independently on its designated port:
 
-1. Install dependencies:
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Run individual labs
+python labs/advanced/lab1_graphql_security.py
+python labs/advanced/lab2_authentication_bypass.py
+python labs/advanced/lab3_injection_attacks.py
+python labs/advanced/lab4_session_management.py
+python labs/advanced/lab5_api_security.py
 ```
 
-2. Required packages:
-- Flask
-- PyJWT
-- requests (for testing)
+## Security Remediations
 
-### Running the Labs
+### General Best Practices:
 
-Each lab runs on a different port:
+1. **Input Validation:**
+   - Validate all user inputs
+   - Use parameterized queries
+   - Implement proper encoding
+   - Sanitize data before processing
 
-```bash
-# Terminal 1 - Lab 1
-python lab1_graphql_security.py
+2. **Authentication:**
+   - Use strong cryptographic algorithms
+   - Implement proper password hashing
+   - Use secure JWT libraries
+   - Never accept 'none' algorithm
 
-# Terminal 2 - Lab 2
-python lab2_authentication_bypass.py
-
-# Terminal 3 - Lab 3
-python lab3_injection_attacks.py
-
-# Terminal 4 - Lab 4
-python lab4_session_management.py
-
-# Terminal 5 - Lab 5
-python lab5_api_security.py
-```
-
-### Testing with curl
-
-```bash
-# Test Lab 2 - Authentication Bypass
-curl -X POST http://localhost:5002/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-
-# Test Lab 3 - SQL Injection
-curl 'http://localhost:5003/api/search/users?q=admin%27%20OR%20%271%27=%271'
-
-# Test Lab 4 - Session Fixation
-curl 'http://localhost:5004/api/session/set?session_id=hacker123'
-
-# Test Lab 5 - IDOR
-curl http://localhost:5005/api/user/1
-```
-
-## Common Exploitation Patterns
-
-### Authentication Bypass
-- Modify JWT claims (change role to 'admin')
-- Use 'none' algorithm in JWT
-- Bypass with username enumeration: `admin' --`
-- Use default credentials: `default:backup:12345`
-
-### Injection Attacks
-- SQL: `' OR '1'='1`, `admin' --`, `' UNION SELECT`
-- Command: `; cat /etc/passwd`, `| whoami`
-- LDAP: `*`, `admin*)(|(uid=*`, `*)(objectClass=*`
-
-### Session Manipulation
-- Predict session IDs (timestamps, sequences)
-- Set arbitrary session IDs via /api/session/set
-- Modify cookies to set admin role
-- Bypass CSRF by omitting token
-
-### IDOR
-- Change numeric IDs: /api/user/1, /api/user/2, /api/user/3
-- Try UUID variations
-- Use API version differences: /api/v1 vs /api/v2
-- Access admin resources by ID
-
-## Defense Mechanisms
-
-To remediate these vulnerabilities:
-
-1. **Authentication:**
-   - Use strong, cryptographically secure token generation
-   - Implement proper JWT verification
-   - Enforce token expiration and refresh token rotation
-   - Use httponly, secure flags on cookies
-
-2. **Injection Prevention:**
-   - Use parameterized queries/prepared statements
-   - Input validation and sanitization
-   - Escape user input
-   - Use ORM frameworks
-
-3. **Session Security:**
-   - Generate cryptographically secure session IDs
-   - Implement proper CSRF tokens (unique per request)
-   - Enforce session timeouts
+3. **Session Management:**
+   - Generate cryptographically random sessions
+   - Implement proper session expiration
    - Validate session tokens server-side
 
 4. **Authorization:**
@@ -282,6 +227,7 @@ To remediate these vulnerabilities:
 ## Lab Progression
 
 Recommended order of difficulty:
+
 1. Lab 2 - Authentication Bypass (foundational)
 2. Lab 4 - Session Management (related to auth)
 3. Lab 3 - Injection Attacks (common vulnerability)
@@ -291,12 +237,105 @@ Recommended order of difficulty:
 ## Assessment Criteria
 
 Successfully completing a lab requires:
+
 - [ ] Identifying all vulnerability types
 - [ ] Understanding root causes
 - [ ] Demonstrating exploitation
 - [ ] Obtaining all challenge flags
 - [ ] Documenting the attack vector
 - [ ] Proposing remediation
+
+## Programming Concepts and API Security
+
+### Core Programming Principles for Secure APIs
+
+Understanding fundamental programming concepts is essential for building and securing APIs:
+
+#### 1. Input Validation and Sanitization
+- **Concept:** Never trust user input - validate, sanitize, and encode all data
+- **Application:** Prevents injection attacks, XSS, and data corruption
+- **Best Practice:** Use allowlists over denylists, validate data types and ranges
+
+#### 2. Principle of Least Privilege
+- **Concept:** Grant minimum necessary permissions for operations
+- **Application:** Limits damage from compromised accounts or vulnerabilities
+- **Best Practice:** Implement role-based access control (RBAC) with granular permissions
+
+#### 3. Defense in Depth
+- **Concept:** Multiple layers of security controls
+- **Application:** If one layer fails, others provide protection
+- **Best Practice:** Combine authentication, authorization, encryption, and monitoring
+
+#### 4. Secure by Default
+- **Concept:** Security should be the default state, not an optional feature
+- **Application:** Deny access unless explicitly granted
+- **Best Practice:** Fail securely, use secure defaults in configurations
+
+#### 5. Error Handling and Information Disclosure
+- **Concept:** Handle errors gracefully without revealing sensitive information
+- **Application:** Prevents enumeration and information leakage
+- **Best Practice:** Use generic error messages, log detailed errors server-side
+
+### API Security Fundamentals
+
+#### Authentication vs Authorization
+- **Authentication:** Verifying identity ("Who are you?")
+- **Authorization:** Verifying permissions ("What can you do?")
+- **Common Pitfall:** Implementing authentication without proper authorization checks
+
+#### Stateless vs Stateful Sessions
+- **Stateless (JWT):** Self-contained tokens, scalable but harder to revoke
+- **Stateful (Session IDs):** Server-stored sessions, easier to manage but requires storage
+- **Security Trade-offs:** Consider revocation needs, scalability, and attack surface
+
+#### Data Integrity and Confidentiality
+- **Integrity:** Ensuring data hasn't been tampered with (HMAC, digital signatures)
+- **Confidentiality:** Protecting data from unauthorized access (encryption, TLS)
+- **Implementation:** Use HTTPS, encrypt sensitive data at rest, sign critical data
+
+### Common Programming Mistakes Leading to Vulnerabilities
+
+1. **String Concatenation in Queries:** Use parameterized queries instead
+2. **Client-Side Validation Only:** Always validate server-side
+3. **Hardcoded Secrets:** Use environment variables and secret management
+4. **Weak Random Number Generators:** Use cryptographically secure RNGs
+5. **Ignoring Return Values:** Check error conditions and handle failures
+6. **Race Conditions:** Implement proper locking and atomic operations
+7. **Insecure Deserialization:** Validate and sanitize before deserializing
+
+### API Design Patterns for Security
+
+#### RESTful Security Patterns
+- Use proper HTTP methods (GET for reads, POST/PUT/DELETE for modifications)
+- Implement proper status codes (401 vs 403, 404 vs 403)
+- Version your APIs to manage breaking changes
+- Use resource-based URLs, not action-based
+
+#### GraphQL Security Patterns
+- Implement query depth limiting
+- Use query complexity analysis
+- Disable introspection in production
+- Implement field-level authorization
+- Monitor for batch attack patterns
+
+#### Rate Limiting Strategies
+- Token bucket algorithm for burst handling
+- Sliding window for precise rate control
+- Distributed rate limiting for scaled systems
+- Per-user and per-IP rate limiting
+
+### Secure Coding Checklist
+
+- [ ] All inputs validated and sanitized
+- [ ] Authentication required for sensitive endpoints
+- [ ] Authorization checks on every request
+- [ ] Cryptographically secure random values
+- [ ] No sensitive data in logs or errors
+- [ ] HTTPS enforced for all communications
+- [ ] Security headers properly configured
+- [ ] Rate limiting implemented
+- [ ] Regular security testing performed
+- [ ] Dependencies kept up to date
 
 ## Resources
 
@@ -315,7 +354,9 @@ Successfully completing a lab requires:
 - Understanding these vulnerabilities helps build more secure APIs
 
 ## Author
+
 API Penetration Testing Lab - Advanced Track
 
 ## License
+
 Educational use only
