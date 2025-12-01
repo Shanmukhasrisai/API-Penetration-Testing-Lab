@@ -11,12 +11,12 @@ import json
 import argparse
 import os
 import requests
-from urllib.parse import urljoin, quote
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 USER_AGENT = "AdvancedHackerHuntLab/2.0"
 DEFAULT_TIMEOUT = 7
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit for config files
+
 
 def load_endpoints_config(filename: str) -> List[Dict[str, Any]]:
     """Load API endpoints and test details from JSON config file"""
@@ -57,7 +57,15 @@ def load_endpoints_config(filename: str) -> List[Dict[str, Any]]:
         print(f"[!] Unexpected error loading config: {e}")
         sys.exit(1)
 
-def make_request(url: str, method: str, headers: dict, params=None, data=None):
+
+def make_request(
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    params: Optional[Dict[str, str]] = None,
+    data: Optional[Dict[str, str]] = None,
+    timeout: int = DEFAULT_TIMEOUT
+) -> Tuple[Optional[int], Optional[str]]:
     """Make HTTP request with proper error handling and security settings"""
     try:
         # Validate URL scheme
@@ -71,7 +79,7 @@ def make_request(url: str, method: str, headers: dict, params=None, data=None):
             headers=headers, 
             params=params, 
             data=data, 
-            timeout=DEFAULT_TIMEOUT,
+            timeout=timeout,
             verify=True,  # Enable SSL verification
             allow_redirects=False  # Prevent open redirect vulnerabilities
         )
@@ -90,7 +98,14 @@ def make_request(url: str, method: str, headers: dict, params=None, data=None):
         print(f"[!] Unexpected error during request to {url}: {e}")
         return None, None
 
-def test_reflected_xss(url: str, method: str, headers: dict, param_name: str):
+
+def test_reflected_xss(
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    param_name: str,
+    timeout: int = DEFAULT_TIMEOUT
+) -> bool:
     """Test for reflected XSS vulnerabilities"""
     # Sanitize parameter name
     if not param_name or not isinstance(param_name, str):
@@ -101,10 +116,10 @@ def test_reflected_xss(url: str, method: str, headers: dict, param_name: str):
     try:
         if method.upper() == "GET":
             params = {param_name: payload}
-            status, content = make_request(url, "GET", headers, params=params)
+            status, content = make_request(url, "GET", headers, params=params, timeout=timeout)
         else:
             data = {param_name: payload}
-            status, content = make_request(url, method.upper(), headers, data=data)
+            status, content = make_request(url, method.upper(), headers, data=data, timeout=timeout)
         
         if content and payload in content:
             return True
@@ -113,7 +128,14 @@ def test_reflected_xss(url: str, method: str, headers: dict, param_name: str):
     
     return False
 
-def test_sql_injection(url: str, method: str, headers: dict, param_name: str):
+
+def test_sql_injection(
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    param_name: str,
+    timeout: int = DEFAULT_TIMEOUT
+) -> bool:
     """Test for SQL injection vulnerabilities"""
     # Sanitize parameter name
     if not param_name or not isinstance(param_name, str):
@@ -124,10 +146,10 @@ def test_sql_injection(url: str, method: str, headers: dict, param_name: str):
     try:
         if method.upper() == "GET":
             params = {param_name: payload}
-            status, content = make_request(url, "GET", headers, params=params)
+            status, content = make_request(url, "GET", headers, params=params, timeout=timeout)
         else:
             data = {param_name: payload}
-            status, content = make_request(url, method.upper(), headers, data=data)
+            status, content = make_request(url, method.upper(), headers, data=data, timeout=timeout)
         
         if content:
             errors = [
@@ -143,7 +165,12 @@ def test_sql_injection(url: str, method: str, headers: dict, param_name: str):
     
     return False
 
-def run_tests(endpoint: Dict[str, Any], auth_headers: dict):
+
+def run_tests(
+    endpoint: Dict[str, Any],
+    auth_headers: Dict[str, str],
+    timeout: int = DEFAULT_TIMEOUT
+) -> Dict[str, Any]:
     """Run security tests on an endpoint"""
     results = {
         "url": endpoint.get("url"),
@@ -163,15 +190,16 @@ def run_tests(endpoint: Dict[str, Any], auth_headers: dict):
             continue
         
         try:
-            if test_reflected_xss(endpoint["url"], results["method"], auth_headers, param):
+            if test_reflected_xss(endpoint["url"], results["method"], auth_headers, param, timeout):
                 results["vulnerabilities"].setdefault("reflected_xss", []).append(param)
             
-            if test_sql_injection(endpoint["url"], results["method"], auth_headers, param):
+            if test_sql_injection(endpoint["url"], results["method"], auth_headers, param, timeout):
                 results["vulnerabilities"].setdefault("sql_injection", []).append(param)
         except Exception as e:
             print(f"[!] Error testing parameter '{param}': {e}")
     
     return results
+
 
 def main():
     parser = argparse.ArgumentParser(description="Advanced HackerHunt Lab for API Pentesting")
@@ -182,10 +210,8 @@ def main():
     
     args = parser.parse_args()
     
-    # Update timeout if specified
-    global DEFAULT_TIMEOUT
-    if args.timeout > 0:
-        DEFAULT_TIMEOUT = args.timeout
+    # Validate timeout
+    timeout = args.timeout if args.timeout > 0 else DEFAULT_TIMEOUT
     
     auth_headers = {"User-Agent": USER_AGENT}
     if args.auth:
@@ -206,7 +232,7 @@ def main():
     for endpoint in endpoints:
         try:
             print(f"[*] Testing endpoint {endpoint.get('url')} with method {endpoint.get('method', 'GET')}")
-            result = run_tests(endpoint, auth_headers)
+            result = run_tests(endpoint, auth_headers, timeout)
             report.append(result)
         except Exception as e:
             print(f"[!] Error testing endpoint {endpoint.get('url')}: {e}")
@@ -222,6 +248,6 @@ def main():
     else:
         print(json.dumps(report, indent=2))
 
+
 if __name__ == "__main__":
     main()
-
