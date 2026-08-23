@@ -1,19 +1,18 @@
 """Lab 2: Authentication Bypass Vulnerabilities
-Challenge: Identify and exploit various authentication bypass vulnerabilities
+Challenge: Identify and exploit various authentication bypass vulnerabilities.
 Vulnerabilities covered:
-- JWT token manipulation
-- Weak token generation
-- Authentication bypass through header injection
-- Default credentials
-- Token forgery
+- JWT 'none' algorithm and weak secret manipulation
+- Flawed token verification decorator
+- Missing authorization / Role checks
+- Authentication bypass via custom headers (X-User-Role)
+- Default / hardcoded credentials
+- Token expiration handling flaws
 """
 
 from flask import Flask, request, jsonify
 from functools import wraps
 import jwt
-import secrets
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super_secret_key_12345'
@@ -24,134 +23,139 @@ users_db = {
     'user': {'password': 'user123', 'role': 'user'},
 }
 
-# Token blacklist for logout
+# Token blacklist for logout (simulated)
 token_blacklist = set()
 
-# Vulnerable authentication decorator
+
 def vulnerable_token_auth(f):
-    """Vulnerable authentication that can be bypassed"""
+    """Vulnerable authentication decorator supporting intentional 'none' alg vulnerability."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'message': 'Token required'}), 401
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'message': 'Authorization header required'}), 401
         
-        # Vulnerability 1: No proper Bearer scheme validation
-        token = token.replace('Bearer ', '')
+        # Vulnerability 1: Naive string replacement without checking scheme format
+        token = auth_header.replace('Bearer ', '').strip()
         
         try:
-            # Vulnerability 2: Using the same secret key AND algorithm allows brute force
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256', 'none'])
+            # Vulnerability 2: Simulating weak validation / 'none' algorithm support
+            unverified_headers = jwt.get_unverified_header(token)
+            
+            if unverified_headers.get('alg', '').lower() == 'none':
+                # Vulnerability: Accepts unsigned tokens if alg=none
+                payload = jwt.decode(token, options={"verify_signature": False})
+            else:
+                payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            
             request.user = payload
         except jwt.InvalidTokenError as e:
-            # Vulnerability 3: Error message leaks information
+            # Vulnerability 3: Verbose error messages leaking internals
             return jsonify({'message': f'Invalid token: {str(e)}'}), 401
+        except Exception as e:
+            return jsonify({'message': f'Token processing error: {str(e)}'}), 401
         
         return f(*args, **kwargs)
     return decorated
 
-# Vulnerable login endpoint
+
 @app.route('/api/login', methods=['POST'])
 def vulnerable_login():
-    """Vulnerable login with weak token generation"""
-    data = request.get_json()
+    """Vulnerable login with weak validation & plaintext credentials."""
+    data = request.get_json(silent=True) or {}
     username = data.get('username')
     password = data.get('password')
     
-    # Vulnerability 4: Username enumeration
+    if not username or not password:
+        return jsonify({'message': 'Username and password required'}), 400
+
+    # Vulnerability 4: Username enumeration via distinct error responses
     if username not in users_db:
-        return jsonify({'message': 'Invalid credentials'}), 401
+        return jsonify({'message': 'User does not exist'}), 401
     
     user = users_db[username]
     
-    # Vulnerability 5: Plaintext password comparison (not hashed)
+    # Vulnerability 5: Plaintext password comparison
     if user['password'] != password:
-        return jsonify({'message': 'Invalid credentials'}), 401
+        return jsonify({'message': 'Incorrect password'}), 401
     
-    # Vulnerability 6: Weak token generation with predictable claims
-    # The token generation uses timestamp which can be predicted
+    # Vulnerability 6: Predictable token payload
+    now = datetime.now(timezone.utc)
     payload = {
         'user_id': username,
         'username': username,
         'role': user['role'],
-        'iat': datetime.utcnow().timestamp(),  # Predictable timestamp
-        'exp': (datetime.utcnow() + timedelta(hours=24)).timestamp()
+        'iat': int(now.timestamp()),
+        'exp': int((now + timedelta(hours=24)).timestamp())
     }
     
-    # Vulnerability 7: Algorithm can be set to 'none' and token will be accepted
     token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
-    
     return jsonify({'token': token, 'user': username}), 200
 
-# Vulnerable admin endpoint
+
 @app.route('/api/admin', methods=['GET'])
 @vulnerable_token_auth
 def vulnerable_admin():
-    """Vulnerable admin endpoint that only checks token existence"""
-    # Vulnerability 8: No role verification, only checks token exists
-    return jsonify({'message': 'Admin panel', 'data': 'Sensitive admin data'}), 200
+    """Vulnerability 7: Endpoint verifies token existence but forgets role check."""
+    return jsonify({
+        'message': 'Admin panel accessed',
+        'data': 'Sensitive administrative dataset: [CONFIDENTIAL_KEYS]'
+    }), 200
 
-# Vulnerable data endpoint with header injection
+
 @app.route('/api/data', methods=['GET'])
 def vulnerable_data():
-    """Endpoint vulnerable to header injection bypass"""
-    # Vulnerability 9: Accepts X-User-Role header for authentication
+    """Vulnerability 8: Trusting unauthenticated client headers for privilege escalation."""
     user_role = request.headers.get('X-User-Role', 'guest')
-    user_id = request.headers.get('X-User-ID', '')
     
     if user_role == 'admin':
-        return jsonify({'message': 'Sensitive data', 'data': 'Internal secrets'}), 200
+        return jsonify({'message': 'Sensitive data', 'data': 'Internal company secrets'}), 200
     
-    return jsonify({'message': 'Access denied'}), 403
+    return jsonify({'message': 'Access denied: Requires admin role header'}), 403
 
-# Vulnerable endpoint with default credentials
+
 @app.route('/api/backup', methods=['GET'])
 def vulnerable_backup():
-    """Endpoint vulnerable to default credentials"""
+    """Vulnerability 9: Hardcoded backdoor / default credentials."""
     auth_header = request.headers.get('Authorization', '')
     
-    # Vulnerability 10: Default credentials check
     if auth_header == 'Bearer default:backup:12345':
-        return jsonify({'backup_data': 'All user passwords: admin123, user123, guest456'}), 200
+        return jsonify({'backup_data': 'User DB Backup: admin:admin123, user:user123'}), 200
     
     return jsonify({'message': 'Unauthorized'}), 401
 
-# Vulnerable logout endpoint
+
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    """Weak logout that doesn't actually invalidate tokens"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    
-    # Vulnerability 11: Token can still be used after logout
-    # token_blacklist.add(token)  # This is commented out - not implemented!
-    
-    return jsonify({'message': 'Logged out'}), 200
+    """Vulnerability 10: Logout does not invalidate token on server."""
+    # Blacklist logic intentionally left unexecuted
+    return jsonify({'message': 'Successfully logged out'}), 200
 
-# Vulnerable token refresh endpoint
+
 @app.route('/api/refresh', methods=['POST'])
 def vulnerable_refresh():
-    """Endpoint with weak token refresh logic"""
-    old_token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    """Vulnerability 11: Refreshes tokens without validating expiration or signatures."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '').strip()
     
     try:
-        # Vulnerability 12: No verification of the old token
-        payload = jwt.decode(old_token, app.config['SECRET_KEY'], algorithms=['HS256'], options={'verify_exp': False})
-        
-        # Vulnerability 13: New token uses same claims without updating
+        payload = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
         new_token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
         return jsonify({'token': new_token}), 200
-    except:
-        return jsonify({'message': 'Invalid token'}), 401
+    except Exception as e:
+        return jsonify({'message': f'Refresh failed: {str(e)}'}), 400
 
-# Challenge endpoint
+
 @app.route('/api/challenge', methods=['GET'])
 @vulnerable_token_auth
 def challenge():
-    """Challenge endpoint - access this as admin to complete the lab"""
+    """Challenge completion endpoint."""
     if request.user.get('role') != 'admin':
         return jsonify({'message': 'Admin access required'}), 403
     
-    return jsonify({'flag': 'FLAG{auth_bypass_master}'}), 200
+    return jsonify({'flag': 'FLAG{auth_bypass_master_jwt_none_header}'}), 200
+
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5002)
+    # Binds to 0.0.0.0 for Docker & local interoperability
+    app.run(host='0.0.0.0', port=5002, debug=True)
