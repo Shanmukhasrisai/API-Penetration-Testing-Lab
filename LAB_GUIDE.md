@@ -1,4 +1,4 @@
- API Penetration Testing Lab — Comprehensive Guide
+ # API Penetration Testing Lab — Comprehensive Guide
 
 A structured, zero-knowledge-to-expert hands-on curriculum for API security testing. This guide connects architectural theory, manual traffic analysis (cURL / Burp Suite), automated exploit scripting, and secure code remediation.
 
