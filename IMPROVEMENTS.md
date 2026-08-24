@@ -1,111 +1,76 @@
-# Repository Improvements
+# 🛠️ Repository Improvements & Architecture Changelog
 
-This document outlines the improvements made to the API-Penetration-Testing-Lab repository to enhance code quality, functionality, and usability.
-
-## Improvements Implemented
-
-### 1. Added requirements.txt
-**Status**: ✅ Completed
-
-- Created a `requirements.txt` file with all project dependencies
-- Included Flask, requests, and colorama packages with specific versions
-- Makes installation easier with `pip install -r requirements.txt`
-
-### 2. Fixed Double Extension Issue
-**Status**: ⚠️ Pending (requires manual rename)
-
-- The main Python file is named `api.py.py` (double extension)
-- Should be renamed to `api.py` to follow standard naming conventions
-- This affects documentation and usability
-
-### 3. Code Quality Improvements Recommended
-
-#### a) Enhanced Error Handling
-- Add try-except blocks for file operations in `load_endpoints_config()`
-- Handle specific exceptions (FileNotFoundError, JSONDecodeError)
-- Implement proper timeout handling for HTTP requests
-- Add connection error handling
-
-#### b) Improved Logging
-- Add logging module for better debugging
-- Configure structured logging with timestamps
-- Add log levels (INFO, WARNING, ERROR)
-- Log all test results and errors
-
-#### c) Enhanced Security Testing
-- **XSS Testing**: Add multiple XSS payloads instead of single payload
-  - `<script>alert('XSS')</script>`
-  - `<img src=x onerror=alert('XSS')>`
-  - `javascript:alert('XSS')`
-- **SQL Injection**: Add comprehensive SQLi payloads
-  - `1' OR '1'='1`
-  - `1' UNION SELECT NULL--`
-  - `' OR 1=1--`
-  - `admin'--`
-- Add more SQL error signatures for better detection
-
-#### d) Better Documentation
-- Add docstrings to all functions with:
-  - Function purpose
-  - Parameters description
-  - Return values
-  - Possible exceptions
-- Add type hints for better code clarity
-
-#### e) Configuration Validation
-- Validate endpoint configuration structure
-- Check for required fields (url, method, params)
-- Warn about missing or empty configurations
-
-#### f) Enhanced Reporting
-- Add timestamp to test results
-- Include detailed vulnerability information
-- Add test summary statistics
-- Track which payloads successfully identified vulnerabilities
-
-#### g) Additional Features
-- Add `--verbose` flag for detailed logging
-- Improve report structure with metadata
-- Add better error messages for troubleshooting
-
-### 4. README Updates Needed
-**Status**: ⚠️ Pending
-
-- Update command examples to use `api.py` instead of `api.py.py`
-- Add section about requirements.txt installation
-- Improve setup instructions
-- Add examples of configuration files
-- Document new logging and verbose options
-
-## Recommended Next Steps
-
-1. **Rename api.py.py to api.py**: Use GitHub's file rename feature
-2. **Update README.md**: Fix all references from `api.py.py` to `api.py`
-3. **Implement Code Improvements**: Apply the enhanced error handling, logging, and security testing improvements
-4. **Add Example Config**: Create `example_config.json` to help users get started
-5. **Add Tests**: Consider adding unit tests for core functions
-6. **Security**: Add note that this tool is for educational/authorized testing only
-
-## Benefits
-
-- **Better Error Messages**: Users will understand issues quickly
-- **More Comprehensive Testing**: Enhanced payloads catch more vulnerabilities
-- **Easier Debugging**: Logging helps track down problems
-- **Professional Quality**: Proper documentation and structure
-- **Easier Installation**: Requirements.txt simplifies setup
-- **Better Reports**: Detailed JSON output with timestamps and metadata
-
-## Security Note
-
-This tool should only be used for:
-- Educational purposes
-- Authorized penetration testing
-- Testing your own applications
-- Testing with explicit permission
-
-Unauthorized testing of systems you don't own is illegal.
+This document tracks completed enhancements, architectural upgrades, and pending roadmap items for the **API-Penetration-Testing-Lab** repository.
 
 ---
 
-**Date**: November 27, 2025
-**Improvements By**: Comet Assistant
+## 📊 Status Dashboard
+
+| Category | Status | Details |
+| :--- | :--- | :--- |
+| **Lab Progression Architecture** | ✅ Completed | Dual-tier curriculum: `intermediate/` (Foundations & JWT) and `critical/` (OWASP Criticals). |
+| **Local Dockerized Environment** | ✅ Completed | Containerized FastAPI/Flask backend (`server/app.py` + `docker-compose.yml`). |
+| **Dependency Standardization** | ✅ Completed | Unified `requirements.txt` across attacker scripts and target backend. |
+| **File Naming & Clean Repository** | ✅ Completed | Eliminated redundant extensions (e.g., `api.py.py` $\rightarrow$ `app.py`); updated `.gitignore`. |
+| **Vulnerability Detection Engines** | ✅ Completed | Replaced static string checks with dynamic exploits and statistical blind timing checks. |
+| **Manual Burp / cURL Walkthroughs** | ⏳ In Progress | Step-by-step HTTP inspection manuals for zero-knowledge learners. |
+
+---
+
+## 🚀 Key Improvements Implemented
+
+### 1. Dual Architecture (Target Backend vs. Exploit Harness)
+- **Local Target Backend (`server/app.py`):** Added a self-hosted FastAPI target exposing genuine, realistic vulnerability endpoints.
+- **Docker Compose Setup (`docker-compose.yml`):** Allows instant local deployment (`docker compose up --build -d`) without requiring external network connectivity or cloud infrastructure.
+
+### 2. Upgraded Critical Lab Modules (`labs/critical/`)
+- **`lab1_oauth2_security_bypass.py`:**
+  - Dynamic CSRF state validation testing.
+  - Redirect URI parameter pollution, traversal, and open redirect chaining.
+  - JWT `alg: none` token forgery and scope privilege escalation.
+- **`lab2_rate_limit_bypass.py`:**
+  - Layer 7 IP origin header spoofing (`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`).
+  - HTTP verb switching and `X-HTTP-Method-Override` testing.
+  - URL normalization and path whitespace bypass probes.
+  - Synchronized multi-threaded concurrency bursts (`threading.Event`) for race conditions.
+- **`lab3_injection_attacks.py`:**
+  - Context-aware testing for URL query params, JSON bodies, and XML parsers.
+  - Statistical baseline latency calculation for time-based blind SQLi (`pg_sleep()`, `SLEEP()`).
+  - NoSQL operator injection (`$gt`, `$ne`, `$regex`, `$where`).
+  - Remote OS command injection and multi-engine SSTI validation (Jinja2, Twig, FreeMarker, ERB).
+- **`lab4_sensitive_data_exposure.py`:**
+  - Multi-tenant BOLA / IDOR verification (cross-account object token exchange).
+  - Mass assignment testing on profile update routes (`is_admin`, `role`, `account_balance`).
+  - Regex-based response scanning for leaked cloud keys, JWTs, and database DSNs.
+  - Verbose error stack trace disclosure profiling.
+
+### 3. Upgraded Intermediate Lab Modules (`labs/intermediate/`)
+- **`lab1_jwt_attacks.py`:**
+  - Guided step-by-step interactive workflow (Structure $\rightarrow$ Algorithm 'none' $\rightarrow$ Signature Integrity $\rightarrow$ Secret Cracking $\rightarrow$ Key Confusion $\rightarrow$ Expiration).
+  - Asymmetric-to-Symmetric (RS256 $\rightarrow$ HS256) Key Confusion attack.
+  - Offline dictionary brute-forcing against weak HMAC-SHA256 secrets.
+- **`lab2_injection_attacks.py`:**
+  - Comprehensive CLI scanner supporting `--url`, `--auth`, `--endpoints`, and `--report`.
+  - Detection for SQLi, NoSQL, Path Traversal / LFI, and API-reflected XSS.
+
+### 4. Repository & Tooling Standardization
+- **Security-Focused `.gitignore`:** Added rules blocking raw packet captures (`*.pcap`, `*.har`), Burp Suite project files, loot directories, report exports (`*.json`, `*.html`), and private keys (`*.pem`, `*.key`).
+- **ANSI Terminal Output:** Standardized color-coded test output across all test harnesses (`[CRITICAL VULNERABILITY]`, `[SECURE]`, evidence, business impact, and remediation steps).
+
+---
+
+## 📋 Recommended Next Steps
+
+1. **Step-by-Step Walkthrough Guides (`walkthroughs/`):**
+   - Create Markdown walkthroughs with exact Burp Suite Repeater request/response tabs and cURL snippets for zero-knowledge users.
+2. **Beginner Phase (Phase 1):**
+   - Implement `labs/beginner/` covering basic REST API recon, endpoint enumeration, Postman collection imports, and standard HTTP status code interpretation.
+3. **Advanced Production Attacks (Phase 4):**
+   - Add GraphQL introspection, batching, and alias injection labs.
+   - Add Server-Side Request Forgery (SSRF) and webhook manipulation labs.
+
+---
+
+## 🔒 Security & Usage Notice
+
+All scripts, target backends, and documentation in this repository are developed strictly for **authorized educational research, defensive security engineering, and penetration testing training**. Testing targets without prior explicit written authorization is illegal.
